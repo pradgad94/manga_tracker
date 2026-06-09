@@ -76,5 +76,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-sonnet-4-6"
           custom_instructions: ${{ steps.ctx.outputs.instructions }}
           prompt: ${{ steps.review_prompt.outputs.text }}
