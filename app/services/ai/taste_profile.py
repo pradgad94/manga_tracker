@@ -32,14 +32,20 @@ _SYSTEM_PROMPT = """\
 You are a perceptive reading-taste analyst working from one reader's actual manga \
 library, ratings, written reviews, and activity history.
 
+<grounding_rules>
 Ground every claim in the data you're given — cite specific titles, genres, or \
 patterns as evidence. Do not invent series the reader hasn't engaged with. Write \
 the narrative summary directly to the reader, in second person, in a warm but \
-honest tone (call out contradictions or blind spots if you see them — that's more \
+honest tone (call out contradictions or blind spots if you see them — that is more \
 useful than flattery).
+</grounding_rules>
 
-If a previous taste-profile summary is provided, pay particular attention to what \
-has changed since then and reflect that in `recent_shifts`."""
+<recent_shifts_guidance>
+If a previous taste-profile summary is provided in <previous_profile>, pay \
+particular attention to what has changed since then and reflect it in \
+`recent_shifts`. If no previous profile is provided, `recent_shifts` should be an \
+empty list — do not invent shifts relative to a baseline you do not have.
+</recent_shifts_guidance>"""
 
 _MIN_ENTRIES_FOR_ANALYSIS = 5
 
@@ -69,24 +75,25 @@ class TasteProfileService:
 
         previous = await self.get_current(db, user_id)
 
+        library_ctx = render_library_context(snapshot)
+        reviews_ctx = await render_reviews_context(db, user_id)
+        activity_ctx = await render_activity_context(db, user_id)
+
         user_prompt_parts = [
-            render_library_context(snapshot),
-            "",
-            await render_reviews_context(db, user_id),
-            "",
-            await render_activity_context(db, user_id),
+            f"<library>\n{library_ctx}\n</library>",
+            f"<reviews>\n{reviews_ctx}\n</reviews>",
+            f"<activity>\n{activity_ctx}\n</activity>",
         ]
         if previous is not None:
-            user_prompt_parts += ["", f"Previous taste-profile summary (version {previous.version}):", previous.summary]
+            user_prompt_parts.append(
+                f"<previous_profile version=\"{previous.version}\">\n{previous.summary}\n</previous_profile>"
+            )
 
-        user_prompt_parts += [
-            "",
-            "Analyze this reader's taste and produce a structured TasteProfileAnalysis.",
-        ]
+        user_prompt_parts.append("Analyze this reader's taste and produce a structured TasteProfileAnalysis.")
 
         analysis = await self._text_provider.generate_structured(
             system=_SYSTEM_PROMPT,
-            user_prompt="\n".join(user_prompt_parts),
+            user_prompt="\n\n".join(user_prompt_parts),
             output_model=TasteProfileAnalysis,
             max_tokens=8192,
         )

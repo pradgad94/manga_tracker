@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.activity import ReadingActivity
     from app.models.library import LibraryEntry
     from app.models.review import Review
 
@@ -68,6 +69,7 @@ class Manga(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     library_entries: Mapped[list["LibraryEntry"]] = relationship(back_populates="manga")
     reviews: Mapped[list["Review"]] = relationship(back_populates="manga")
+    reading_activities: Mapped[list["ReadingActivity"]] = relationship(back_populates="manga")
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Manga id={self.id} mal_id={self.mal_id} title={self.title!r}>"

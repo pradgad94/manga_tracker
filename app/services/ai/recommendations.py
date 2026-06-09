@@ -30,20 +30,27 @@ You recommend manga to a specific reader based on a narrative description of the
 taste (built from their actual library, ratings, and reviews) plus a shortlist of \
 candidates a similarity search has already retrieved.
 
-Choose ONLY from the candidate list — refer to each by its `mal_id` exactly as \
-given, and copy its title verbatim. Never invent or assume details about a \
-candidate beyond what's provided. Some candidates include a "community take" — a \
-digest of what MyAnimeList readers generally say about it; treat that as another \
-real signal alongside genre/synopsis (e.g. a candidate whose community take flags \
-slow pacing might be a riskier pick for a reader whose profile shows they bounce \
-off slow starts, while one praised for found-family dynamics might be a strong \
-match for a reader who responds to that). For each pick, write a short reason \
-addressed directly to the reader that connects it to *specific* aspects of their \
-taste profile (don't just restate the synopsis or community take verbatim). Aim \
-for a mix: a few confident "safe bets" that closely match their established \
-preferences, and a couple of well-reasoned "stretch" picks that extend from a \
-genuine signal in their profile (e.g. an emerging interest noted in \
-`recent_shifts`). Explain that balance briefly in `overall_rationale`."""
+<critical_constraint>
+Recommend ONLY titles present in the provided <candidates> list. Use each \
+candidate's `mal_id` exactly as given and copy its title verbatim. Never recommend \
+a title that is not in the list, and never invent or assume details about a \
+candidate beyond what is explicitly provided. If the list has fewer candidates than \
+the requested count, return only what the list contains — do not pad with invented \
+titles.
+</critical_constraint>
+
+<task>
+For each pick, write a short reason addressed directly to the reader that connects \
+the pick to specific aspects of their taste profile — do not just restate the \
+synopsis or community take verbatim. Some candidates include a "community take" \
+(a digest of what MAL readers say); treat it as a real signal: e.g. slow-pacing \
+warnings matter for a reader whose profile shows they bounce off slow starts, while \
+praised found-family dynamics may be a strong match for a reader who gravitates \
+toward that. Aim for a mix: a few confident "safe bets" that closely match \
+established preferences, and a couple of well-reasoned "stretch" picks that extend \
+from a genuine signal in their profile (e.g. an emerging interest in `recent_shifts`). \
+Explain that balance briefly in `overall_rationale`.
+</task>"""
 
 _CANDIDATE_POOL_SIZE = 60
 _SYNOPSIS_CHARS = 350
@@ -107,10 +114,11 @@ class RecommendationService:
             candidate_lines.append("- " + " | ".join(bits))
 
         user_prompt = (
-            f"Reader's taste profile:\n{taste_summary}\n\n"
-            f"Candidate shortlist ({len(candidates)} titles, not yet in the reader's library):\n"
+            f"<taste_profile>\n{taste_summary}\n</taste_profile>\n\n"
+            f"<candidates count=\"{len(candidates)}\" note=\"none of these are in the reader's library yet\">\n"
             + "\n".join(candidate_lines)
-            + f"\n\nRecommend {count} of these candidates."
+            + f"\n</candidates>\n\n"
+            f"Recommend {count} of these candidates."
         )
 
         return await self._text_provider.generate_structured(

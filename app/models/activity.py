@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.manga import Manga
     from app.models.user import User
 
 
@@ -54,6 +55,7 @@ class ReadingActivity(UUIDPrimaryKeyMixin, Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="activities")
+    manga: Mapped["Manga | None"] = relationship(back_populates="reading_activities")
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<ReadingActivity user_id={self.user_id} type={self.activity_type}>"

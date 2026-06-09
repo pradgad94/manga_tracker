@@ -38,7 +38,14 @@ generation and embeddings behind one API key — so a single `GeminiProvider`
 `genai.Client`:
 
 - Uses `genai.Client` / `client.aio.models.*` from the official `google-genai`
-  package exclusively
+  package exclusively. Declared as `google-genai>=1.51` (see `requirements.txt`
+  / `pyproject.toml`) — that floor isn't arbitrary: `1.51.0` is the first release
+  whose `ThinkingConfig` exposes `thinking_level` (the Gemini-3-generation
+  thinking knob this provider sets directly), and everything else the provider
+  touches (`generate_content`/`embed_content`/`types.*`/`errors.*`) is stable
+  across the whole `>=1.51` range — the 1.x→2.x jump only changed the
+  (unused-here) Interactions API. Verified directly against the installed
+  `google-genai` 2.8.0 source — see the version note atop `gemini_provider.py`
 - `model=settings.gemini_model` (defaults to `gemini-3.5-flash`) with
   `thinking_config=ThinkingConfig(thinking_level=settings.gemini_thinking_level)`
   (defaults to `"high"`)

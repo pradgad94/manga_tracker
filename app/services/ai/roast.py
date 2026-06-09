@@ -27,6 +27,7 @@ fond, ribbing kind of roast you'd give someone about their own taste, not a publ
 takedown review. Be funny and sharp, and stay affectionate throughout: the reader \
 should finish this laughing at themselves, not feeling judged.
 
+<source_material>
 Build every joke from what you're actually given — the manga's genres, synopsis, \
 and MAL reception, and (most importantly) THIS reader's own relationship to it: \
 their progress, score, status, favorite/reread habits, notes, and review if they \
@@ -35,12 +36,24 @@ how the reader actually responded to it — e.g. someone three volumes into a \
 "feel-good slice of life" who scored it a 4, or someone who marked a 30-volume epic \
 a favorite and reread it twice. Reference specifics; generic jokes that could apply \
 to any manga are the least funny option available to you.
+</source_material>
 
-Stay spoiler-free no matter what the source material reveals — never describe plot \
-twists, character fates, or how anything ends; the reader may not have gotten there \
-yet. Keep the humor aimed at tropes, pacing, and the reader's own reading habits — \
-never at real people (authors, artists, voice actors, etc.), and never in a way \
-that tips from "affectionate ribbing" into actually mean."""
+<constraints>
+Stay completely spoiler-free — never describe plot twists, character fates, or how \
+anything ends; the reader may not have gotten there yet. Aim humor at tropes, \
+pacing, and the reader's own habits — never at real people (authors, artists, etc.), \
+and never in a way that tips from affectionate ribbing into mean.
+</constraints>
+
+<output_format>
+- `roast`: 2-3 short, punchy paragraphs addressed directly to the reader. Each \
+  paragraph should land a distinct angle. Under 250 words total.
+- `signature_burn`: exactly one sentence — the sharpest, most quotable line from \
+  the roast, self-contained enough to make sense out of context.
+- `backhanded_compliment`: one sentence that acknowledges a real strength of the \
+  manga (or the reader's taste/persistence) while wrapping it in a jab.
+- `verdict`: one short, tongue-in-cheek line on whether they should keep going.
+</output_format>"""
 
 _SYNOPSIS_CHARS = 600
 _NOTES_CHARS = 400
@@ -86,44 +99,45 @@ class RoastService:
 
 def _render_prompt(entry: LibraryEntry, review: Review | None) -> str:
     manga = entry.manga
-    lines = [f'Manga: "{manga.title}"' + (f" ({manga.media_type})" if manga.media_type else "")]
+
+    catalog_lines = [f'Manga: "{manga.title}"' + (f" ({manga.media_type})" if manga.media_type else "")]
     if manga.genres:
-        lines.append(f"Genres: {', '.join(manga.genres)}")
+        catalog_lines.append(f"Genres: {', '.join(manga.genres)}")
     if manga.synopsis:
-        lines.append(f"Synopsis: {manga.synopsis.strip()[:_SYNOPSIS_CHARS]}")
+        catalog_lines.append(f"Synopsis: {manga.synopsis.strip()[:_SYNOPSIS_CHARS]}")
     if manga.mal_mean_score is not None:
-        lines.append(f"MAL mean score: {manga.mal_mean_score:.2f}")
+        catalog_lines.append(f"MAL mean score: {manga.mal_mean_score:.2f}")
 
     digest = manga.community_review_digest
     if digest:
         consensus = (digest.get("consensus") or "").strip()
         if consensus:
-            lines.append(f"What the MAL community generally says: {consensus}")
+            catalog_lines.append(f"Community consensus: {consensus}")
         if digest.get("best_for"):
-            lines.append(f"Who the community reckons it's for: {digest['best_for']}")
+            catalog_lines.append(f"Who it tends to land well with: {digest['best_for']}")
 
-    lines.append("")
-    lines.append("Now, THIS reader's own relationship to it — this is the good material:")
-
+    reader_lines = ["This reader's own relationship to it — the good roast material:"]
     progress = f"ch.{entry.progress_chapter}"
     if entry.progress_volume:
         progress += f" / vol.{entry.progress_volume}"
-    lines.append(f"  - Status: {entry.status.value}, progress: {progress}")
+    reader_lines.append(f"  - Status: {entry.status.value}, progress: {progress}")
     if entry.score is not None:
-        lines.append(f"  - Their score: {entry.score}/10")
+        reader_lines.append(f"  - Their score: {entry.score}/10")
     if entry.is_favorite:
-        lines.append("  - Marked it as a favorite")
+        reader_lines.append("  - Marked it as a favorite")
     if entry.times_reread:
-        lines.append(f"  - Reread it {entry.times_reread} time(s)")
+        reader_lines.append(f"  - Reread it {entry.times_reread} time(s)")
     if entry.notes:
-        lines.append(f"  - Their notes on it: {entry.notes.strip()[:_NOTES_CHARS]}")
+        reader_lines.append(f"  - Their notes: {entry.notes.strip()[:_NOTES_CHARS]}")
 
     if review is not None:
         score_bit = f" ({review.score}/10)" if review.score is not None else ""
-        lines.append(f"  - Their own written review{score_bit}: {review.body.strip()[:_REVIEW_CHARS]}")
+        reader_lines.append(f"  - Their written review{score_bit}: {review.body.strip()[:_REVIEW_CHARS]}")
     else:
-        lines.append("  - They haven't written a review for it (yet)")
+        reader_lines.append("  - No written review yet")
 
-    lines.append("")
-    lines.append("Roast this manga for this specific reader. Produce a structured MangaRoast.")
-    return "\n".join(lines)
+    return (
+        "<catalog>\n" + "\n".join(catalog_lines) + "\n</catalog>\n\n"
+        "<reader_context>\n" + "\n".join(reader_lines) + "\n</reader_context>\n\n"
+        "Roast this manga for this specific reader. Produce a structured MangaRoast."
+    )

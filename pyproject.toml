@@ -14,7 +14,7 @@ dependencies = [
     "pgvector>=0.3.6",
     "redis>=5.2",
     "httpx>=0.28",
-    "google-genai>=1.50",
+    "google-genai>=1.51",
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7.4",
     "python-multipart>=0.0.18",
@@ -27,6 +27,8 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
     "mypy>=1.13",
+    "types-python-jose>=3.3",
+    "types-passlib>=1.7",
 ]
 
 [tool.ruff]
@@ -36,6 +38,13 @@ target-version = "py311"
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
+
+# pgvector ships no inline types and no `types-pgvector` stub package exists;
+# the SQLAlchemy `Vector` column type is only ever used as a column-type
+# argument, never inspected, so untyped is fine here.
+[[tool.mypy.overrides]]
+module = ["pgvector.*"]
+ignore_missing_imports = true
 
 [build-system]
 requires = ["setuptools>=68"]

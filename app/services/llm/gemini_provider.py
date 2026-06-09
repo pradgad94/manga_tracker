@@ -10,6 +10,20 @@ previous Claude+Voyage split: fewer credentials to manage, one vendor's rate
 limits and outages to reason about, and one place to translate SDK errors into
 the app's provider-agnostic `LLMError` hierarchy.
 
+SDK version: every type/field/error-shape claim below was checked directly
+against the installed `google-genai` 2.8.0 source (`genai.Client`,
+`client.aio.models.{generate_content,embed_content}`, `types.{ThinkingConfig,
+GenerateContentConfig, EmbedContentConfig, GenerateContentResponse, Candidate,
+FinishReason, BlockedReason}`, `errors.{APIError, ClientError, ServerError}`) —
+not inferred from docs or another SDK's shape. `requirements.txt`/`pyproject.toml`
+pin the floor at `google-genai>=1.51`: that's the first release exposing
+`ThinkingConfig.thinking_level` (added in 1.51.0, replacing the older
+`thinking_budget` knob for Gemini-3-generation models), which `_thinking_level`
+below depends on directly — anything older would raise on construction. The
+1.x → 2.x jump only changed the (unused-here) Interactions API surface, so
+`generate_content`/`embed_content`/`types.*`/`errors.*` are stable across the
+whole `>=1.51` range this provider supports.
+
 Notes on the choices below:
 
 - Async calls go through `client.aio.models.*` — the SDK's asyncio-native mirror
@@ -116,9 +130,10 @@ class GeminiProvider:
     ) -> T:
         response = await self._generate(system, user_prompt, max_tokens, structured_as=output_model)
 
-        if response.parsed is None:
+        parsed = response.parsed
+        if not isinstance(parsed, output_model):
             raise LLMOutputError(f"Gemini's response did not validate against {output_model.__name__}")
-        return response.parsed
+        return parsed
 
     async def _generate(
         self, system: str, user_prompt: str, max_tokens: int, *, structured_as: type[BaseModel] | None
@@ -190,7 +205,12 @@ class GeminiProvider:
             count=len(texts),
             dimensions=self._embedding_dimensions,
         )
-        return [embedding.values for embedding in response.embeddings]
+        vectors: list[list[float]] = []
+        for embedding in response.embeddings:
+            if embedding.values is None:
+                raise LLMOutputError("Gemini returned an embedding with no vector values")
+            vectors.append(embedding.values)
+        return vectors
 
 
 def _translate_error(exc: genai_errors.APIError, source: str) -> LLMError:

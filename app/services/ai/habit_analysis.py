@@ -20,20 +20,31 @@ from app.services.llm.base import TextGenerationProvider
 logger = get_logger(__name__)
 
 _HABITS_SYSTEM_PROMPT = """\
-You are analyzing one reader's *behavior* — how they read, not what they like.
+You are analyzing one reader's behavior — how they read, not what they like.
 
-Work only from the library snapshot and activity log you're given. Focus on \
-patterns: pace, follow-through, how they use the rating scale, and what kinds of \
-series they gravitate toward by length/format. Ground every insight in specific, \
-checkable evidence (counts, titles, statuses) — never speculate beyond the data. \
-Keep `suggestions` genuinely optional and low-pressure; omit it if nothing useful \
-comes to mind."""
+<task>
+Work only from the library snapshot and activity log provided. Focus on patterns: \
+pace, follow-through, how they use the rating scale, and what kinds of series they \
+gravitate toward by length or format. Ground every insight in specific, checkable \
+evidence (counts, titles, statuses) — never speculate beyond the data.
+</task>
+
+<output_guidance>
+Fill all required fields from the data. For `suggestions`: keep it genuinely \
+optional and low-pressure — return an empty list if nothing useful comes to mind. \
+Do not invent suggestions to fill the field.
+</output_guidance>"""
 
 _REVIEW_SYSTEM_PROMPT = """\
-You are analyzing a single manga review written by the reader themselves (not a \
-public/critic review). Read it closely and extract sentiment, themes, and what \
-specifically they praised or criticized. Stay grounded in what the text actually \
-says — don't infer opinions the reviewer didn't express."""
+You are analyzing a single manga review written by the reader themselves.
+
+<task>
+Read the review closely and extract sentiment, themes, and what specifically they \
+praised or criticized. The reader's numeric score (if provided) is a corroborating \
+signal for sentiment — use it alongside the text, but the text takes precedence if \
+they conflict. Stay grounded in what the text actually says; do not infer opinions \
+the reviewer did not express.
+</task>"""
 
 _MIN_ENTRIES_FOR_HABITS = 5
 
@@ -54,14 +65,12 @@ class HabitAnalysisService:
                 f"(have {snapshot['total_entries']})."
             )
 
-        user_prompt = "\n".join(
-            [
-                render_library_context(snapshot),
-                "",
-                await render_activity_context(db, user_id),
-                "",
-                "Analyze this reader's habits and produce a structured ReadingHabitAnalysis.",
-            ]
+        library_ctx = render_library_context(snapshot)
+        activity_ctx = await render_activity_context(db, user_id)
+        user_prompt = (
+            f"<library>\n{library_ctx}\n</library>\n\n"
+            f"<activity>\n{activity_ctx}\n</activity>\n\n"
+            "Analyze this reader's habits and produce a structured ReadingHabitAnalysis."
         )
 
         analysis = await self._text_provider.generate_structured(
@@ -74,10 +83,12 @@ class HabitAnalysisService:
         return analysis
 
     async def analyze_review(self, db: AsyncSession, review: Review) -> ReviewAnalysis:
+        score_line = f"Score: {review.score}/10" if review.score is not None else "Score: not rated"
         user_prompt = (
-            f'Manga: "{review.manga.title}"\n'
-            f"Reader's score: {review.score}/10\n"
-            f"Review text:\n{review.body}\n\n"
+            f"<review manga=\"{review.manga.title}\">\n"
+            f"{score_line}\n"
+            f"{review.body}\n"
+            f"</review>\n\n"
             "Analyze this review and produce a structured ReviewAnalysis."
         )
 

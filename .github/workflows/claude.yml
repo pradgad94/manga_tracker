@@ -1,0 +1,104 @@
+name: Claude PR assistant
+
+# ─── One-time setup (required before this workflow will function) ─────────────
+# 1. Install the Claude GitHub App on this repo:
+#    https://github.com/apps/claude
+#    (or run `claude /install-github-app` in the Claude Code CLI)
+# 2. Add ANTHROPIC_API_KEY as a repository secret:
+#    Settings → Secrets and variables → Actions → New repository secret
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Triggers ────────────────────────────────────────────────────────────────
+# @claude mentions in issue/PR comments        → conversational Q&A / task help
+# @claude mentions in PR review comments       → targeted code discussion
+# PR opened or new commits pushed              → automatic review on each push
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+
+# Required so the action can post comments and approve/request-changes on PRs.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# One concurrent run per PR/branch; cancel any stale run when a new commit
+# is pushed so the review always reflects the latest code.
+concurrency:
+  group: claude-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  claude:
+    name: Claude review / assistant
+    runs-on: ubuntu-latest
+    # Guard: ignore comments that are not @claude mentions (the action already
+    # does this internally, but failing fast here keeps the billing log clean).
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # full history is not needed for review
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # ── System prompt ─────────────────────────────────────────────────
+          # Written following Anthropic's prompting guide:
+          # • Role: establish who Claude is (expert in this specific stack)
+          # • Context: the key architectural choices a reviewer must understand
+          # • Task: what to do on automatic reviews vs. ad-hoc @claude requests
+          # • Format: concrete output expectations (inline code, specific line refs)
+          # • Tone: actionable > comprehensive; block only for correctness/security
+          # ─────────────────────────────────────────────────────────────────
+          custom_instructions: |
+            <role>
+            You are a senior Python / FastAPI engineer reviewing this codebase.
+            Your primary goal is to catch real problems — correctness bugs, security
+            issues, broken contracts — not to leave style comments for their own sake.
+            </role>
+
+            <architecture>
+            - FastAPI backend, Python 3.11, async-first (SQLAlchemy asyncio + asyncpg).
+            - Single LLM provider: Gemini via the official `google-genai` SDK (≥1.51,
+              required for `ThinkingConfig.thinking_level`). Never suggest switching to
+              the Anthropic SDK or raw HTTP — this project is intentionally Gemini-only.
+            - `pydantic-settings` for config; every `Settings` field has a default so
+              `create_app()` builds with zero env vars (used in CI smoke-test).
+            - Redis caching is optional and best-effort: cache failures must NEVER
+              surface as user-facing errors — any Redis error must be caught and silenced.
+            - `ruff` (line-length=100, target py311) and `mypy` (with pydantic plugin)
+              are the enforced linters — only flag a style issue if it would actually
+              fail `ruff check` or `mypy app`.
+            </architecture>
+
+            <automatic_review_task>
+            When a PR is opened or updated (no @claude mention), do this:
+            1. Read the full diff carefully before forming any opinion.
+            2. Group findings by severity:
+               - **Must fix**: correctness bugs, security vulnerabilities, broken async
+                 contracts (e.g. sync I/O inside an async route), missing error handling
+                 at system boundaries (user input / external APIs).
+               - **Should fix**: type errors mypy would catch, missing validation,
+                 performance issues with a measurable impact.
+               - **Consider**: non-blocking suggestions; keep these brief.
+            3. For each finding: cite the exact file and line number, explain WHY it is
+               a problem (not just what), and show a concrete corrected snippet.
+            4. If the diff is correct and there is nothing significant to flag, say so
+               explicitly — a short "LGTM" is more useful than invented nits.
+            </automatic_review_task>
+
+            <ad_hoc_task>
+            When mentioned via @claude: answer the specific question asked. Be direct.
+            For code suggestions, produce a minimal runnable snippet — not a full-file
+            rewrite unless explicitly asked. For design trade-offs, give a recommendation
+            and the key downside, not an exhaustive survey.
+            </ad_hoc_task>

@@ -76,10 +76,15 @@ class CacheClient:
         if self._redis is None:
             return None
         try:
-            return await self._redis.get(key)
+            raw = await self._redis.get(key)
         except Exception:
             logger.warning("cache_get_failed", key=key, exc_info=True)
             return None
+        # decode_responses=True means raw is str|None at runtime, but the stubs
+        # type Redis.get() as bytes|str|None regardless of the constructor flag.
+        if raw is None or isinstance(raw, str):
+            return raw
+        return raw.decode("utf-8")
 
     async def _safe_set(self, key: str, value: str, *, ttl: int | None) -> None:
         if self._redis is None:

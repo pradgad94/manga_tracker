@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, any_, func, select
 
 from app.api.deps import DbSession
 from app.models.manga import Manga
@@ -21,11 +21,11 @@ async def list_manga(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> Page[MangaSummary]:
-    filters = []
+    filters: list[ColumnElement[bool]] = []
     if q:
         filters.append(Manga.title.ilike(f"%{q}%"))
     if genre:
-        filters.append(Manga.genres.any(genre))
+        filters.append(any_(Manga.genres) == genre)
 
     base = select(Manga)
     count_query = select(func.count()).select_from(Manga)

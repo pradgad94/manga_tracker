@@ -27,13 +27,16 @@ logger = get_logger(__name__)
 _SYSTEM_PROMPT = """\
 You help a reader find manga that match what they're describing in their own words.
 
-You'll be given their search phrase and a shortlist of candidates that an \
-embedding search already retrieved as plausibly relevant (titles, genres, and \
-synopses). For each candidate, write ONE sentence — addressed to the reader — \
-explaining concretely why it fits what they asked for, grounded in its actual \
-genres/synopsis. If a candidate is only a loose match, say so honestly rather \
-than overselling it. Also restate what you think they're really looking for as \
-`interpreted_query`."""
+<task>
+You'll receive the reader's search phrase in <query> and a pre-filtered shortlist \
+of candidates in <candidates>. For each candidate, write exactly ONE sentence — \
+addressed directly to the reader — explaining concretely why it fits what they \
+asked for, grounded in its actual genres and synopsis. If a candidate is only a \
+loose match, say so honestly rather than overselling it. Also fill `interpreted_query` \
+with a short restatement of what you think they're really looking for (e.g. \
+"character-driven historical drama with moral ambiguity") — this helps the reader \
+refine their next search if these results miss the mark.
+</task>"""
 
 # Over-fetch from the vector index so the LLM has enough real signal to rank/explain,
 # then truncate to the user-requested limit after explanations are attached.
@@ -88,8 +91,10 @@ class SearchService:
             candidate_lines.append("- " + " | ".join(bits))
 
         user_prompt = (
-            f'Search phrase: "{query}"\n\n'
-            "Candidates (already filtered by similarity search):\n" + "\n".join(candidate_lines)
+            f"<query>{query}</query>\n\n"
+            f"<candidates count=\"{len(candidate_lines)}\" note=\"pre-filtered by embedding similarity\">\n"
+            + "\n".join(candidate_lines)
+            + "\n</candidates>"
         )
 
         try:

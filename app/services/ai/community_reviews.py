@@ -38,16 +38,24 @@ logger = get_logger(__name__)
 
 _DIGEST_SYSTEM_PROMPT = """\
 You are summarizing what MyAnimeList's community says about a manga, based on a \
-sample of user-written reviews (shown ranked by how much engagement each one got). \
+sample of user-written reviews.
+
+<critical_constraint>
+Your digest must be completely spoiler-free. Some source reviews describe plot \
+events, twists, character fates, or endings — do not repeat any of that. Summarize \
+only at the level of themes, tone, craft, and reader reception, so someone who \
+hasn't read the manga yet can safely read your digest. Any review flagged \
+[CONTAINS SPOILERS] must be used only for sentiment signals, never for plot details.
+</critical_constraint>
+
+<task>
 Distill genuine consensus — points multiple reviewers independently make — rather \
 than amplifying any single reviewer's idiosyncratic take. Where reviewers disagree, \
-reflect that by keeping claims modest and specific rather than overstating agreement, \
-and prefer concrete, checkable observations ("pacing slows in the middle arcs") over \
-vague praise or complaint ("it's good"/"it's bad").
-
-Some source reviews may describe plot events, twists, or endings. Your digest must \
-NOT repeat any of that — summarize at the level of themes, tone, craft, and reader \
-reception only, so it stays spoiler-free for someone who hasn't read this yet."""
+reflect that honestly: keep claims modest and specific ("pacing slows in the middle \
+arcs") rather than overstating agreement or resorting to vague praise/criticism \
+("it's good"/"it's bad"). Reviews are shown ranked by reader engagement, so the \
+most-upvoted ones carry more consensus weight.
+</task>"""
 
 # Bounds the prompt: a handful of the most-engaged-with reviews carry most of the
 # consensus signal, and capping per-review length keeps any one wall-of-text from
@@ -77,14 +85,16 @@ class CommunityReviewService:
             return None
 
         sample = sorted(reviews, key=_engagement, reverse=True)[:_MAX_REVIEWS]
+        manga_line = f'"{manga.title}"' + (f" ({manga.media_type})" if manga.media_type else "")
+        genres_line = f"Genres: {', '.join(manga.genres)}" if manga.genres else ""
         user_prompt = (
-            f'Manga: "{manga.title}"'
-            + (f" ({manga.media_type})" if manga.media_type else "")
-            + "\n"
-            + (f"Genres: {', '.join(manga.genres)}\n" if manga.genres else "")
-            + f"\n{len(sample)} community reviews, ranked by reader engagement (most-engaged first):\n"
+            f"<manga>\n{manga_line}"
+            + (f"\n{genres_line}" if genres_line else "")
+            + "\n</manga>\n\n"
+            + f"<reviews count=\"{len(sample)}\" ranked_by=\"reader_engagement\">\n"
             + "\n".join(_render_review(review) for review in sample)
-            + f"\n\nSummarize the community's reception as a structured CommunityReviewDigest. "
+            + f"\n</reviews>\n\n"
+            f"Summarize the community's reception as a structured CommunityReviewDigest. "
             f"Set review_count_considered to exactly {len(sample)}."
         )
 

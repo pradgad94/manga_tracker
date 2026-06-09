@@ -19,7 +19,6 @@ from sqlalchemy.orm import selectinload
 
 from app.models.activity import ReadingActivity
 from app.models.library import LibraryEntry, ReadingStatus
-from app.models.manga import Manga
 from app.models.review import Review
 
 # Hard caps keep the prompt bounded for very large libraries — the LLM gets the
